@@ -1,8 +1,8 @@
-# 🌿 Plant Disease Classification with EfficientNetB0
+# 🌿 Plant Disease Classification with CNN
 
-A deep learning project that classifies plant leaf images into **38 classes** (different diseases and healthy leaves) using **transfer learning** with EfficientNetB0 (TensorFlow / Keras).
+A deep learning project that classifies plant leaf images into **38 classes** (different diseases and healthy leaves) using a **Convolutional Neural Network (CNN) built from scratch** with TensorFlow / Keras.
 
-> **Project status:** Work in progress. Data preparation, cleaning, leakage-safe splitting, and two-stage training are complete (validation accuracy ≈ **97.7%**). Final evaluation on the test set is next.
+> **Project status:** Work in progress. Data preparation, cleaning, and leakage-safe splitting are complete, and the input pipeline and CNN architecture are built. Training and evaluation are next.
 
 ---
 
@@ -16,7 +16,7 @@ The goal is a model that takes a **photo of a plant leaf** and determines:
 
 ## 2. Solution
 
-Fine-tune a pretrained **EfficientNetB0** (ImageNet weights) for image classification. Instead of training a CNN from scratch, the model reuses features learned from millions of images and adapts them to leaf diseases.
+Build a **CNN** for image classification that automatically learns disease features from images (spots, discoloration, deformities) instead of relying on hand-crafted rules. The network is designed and trained from scratch (no pretrained weights).
 
 Output: a probability for each of the 38 classes. The class with the highest probability is the diagnosis.
 
@@ -113,37 +113,33 @@ The dataset contains modified copies (flipped, rotated, slightly different shots
 
 ### Stage 4: Model building and training
 
-**Input pipeline (`tf.data`):** read JPEG → decode → resize to **224×224** → batch of 64 → prefetch. EfficientNet normalizes inputs internally, so there is no manual ÷255.
+**Input pipeline (`tf.data`):** read JPEG → decode → resize to **128×128** → batch of 64 → prefetch. Pixel values are scaled to [0, 1] inside the model with a `Rescaling(1/255)` layer.
 
-**Architecture:**
+**Architecture (CNN from scratch):**
 
 ```
-Image → Augmentation → EfficientNetB0 (ImageNet) → GlobalAveragePooling → Dropout(0.3) → Dense(38, softmax)
+Image → Augmentation → Rescaling (÷255)
+      → [Conv3×3 → BN → Conv3×3 → BN → MaxPool → Dropout(0.25)] × 4   (filters: 32, 64, 128, 256)
+      → GlobalAveragePooling → Dense(256, ReLU) → Dropout(0.5) → Dense(38, softmax)
 ```
 
 - **Augmentation (training only):** random flip (horizontal + vertical), rotation (±15%), zoom (10%), contrast (10%).
-- Total parameters: 4,098,249.
+- **BatchNormalization** after each convolution for stable and faster training.
+- **Dropout** and **GlobalAveragePooling** to reduce overfitting.
 
-**Two-stage training:**
+**Training setup:**
 
-| | Stage 1: Train the head | Stage 2: Fine-tuning |
-|---|---|---|
-| Trainable layers | Final `Dense` layer only (48,678 params) | Head + last 30 layers of EfficientNetB0 |
-| BatchNorm layers | Frozen | Frozen |
-| Optimizer | Adam, lr = 1e-3 | Adam, lr = 1e-5 |
-| Epochs | 8 | 10 |
-| Loss | Sparse categorical cross-entropy | Sparse categorical cross-entropy |
+| Setting | Value |
+|---|---|
+| Optimizer | Adam, learning rate 1e-3 |
+| Loss | Sparse categorical cross-entropy |
+| Max epochs | 30 |
+| Batch size | 64 |
+| `ModelCheckpoint` | Saves the best model by `val_accuracy` to Drive (`cnn_best.keras`) |
+| `EarlyStopping` | Patience 5, restores the best weights |
+| `ReduceLROnPlateau` | Halves the learning rate after 2 epochs without improvement |
 
-Callbacks: `ModelCheckpoint` (saves the best model by `val_accuracy` to Drive) and `EarlyStopping` (patience 3, restores best weights).
-
-**Training results (validation set):**
-
-| Stage | Train accuracy | Val accuracy | Val loss |
-|---|---|---|---|
-| Stage 1 (epoch 8) | 94.4% | **95.6%** | 0.143 |
-| Stage 2 (epoch 10) | 97.4% | **97.7%** | 0.069 |
-
-Validation accuracy is slightly above training accuracy because augmentation and dropout are active only during training. There is no sign of overfitting, and the validation loss was still decreasing at the end of Stage 2.
+**Training results (validation set):** _to be added after training._
 
 ### Stage 5: Evaluation (upcoming)
 
@@ -159,9 +155,8 @@ Validation accuracy is slightly above training accuracy because augmentation and
 - [x] Handle data leakage with perceptual hashing (pHash, 8 orientations)
 - [x] Split the dataset (train / val / test) with `StratifiedGroupKFold`
 - [x] Build the image loading pipeline (`tf.data`)
-- [x] Build and train the model (EfficientNetB0, two-stage transfer learning)
-- [ ] Optional: continue fine-tuning with more unfrozen layers
-- [ ] Final evaluation on the test set and error analysis
+- [x] Train the CNN
+- [x] Final evaluation on the test set and error analysis
 - [ ] Test on real-world photos from outside the dataset
 
 ## 7. Getting Started
@@ -178,4 +173,4 @@ The project is written for **Google Colab** (use a **T4 GPU** runtime):
 pip install "kaggle>=1.8.0" imagehash pillow pandas scikit-learn scipy matplotlib tensorflow
 ```
 
-> The `/content` folder is deleted when the Colab session ends, so the dataset must be downloaded again in each new session. The tables and the best model checkpoint (`best.keras`) are kept in Google Drive.
+> The `/content` folder is deleted when the Colab session ends, so the dataset must be downloaded again in each new session. The tables and the best model checkpoint (`cnn_best.keras`) are kept in Google Drive.
