@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>طبيب الأوراق | تشخيص أمراض النباتات بالصورة</title>
+<meta name="description" content="ارفع صورة ورقة نبات ليحدّد المودل نوع النبات وحالته والمرض.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0a1f15;
+    --deep: #102b1d;
+    --deep-2: #17382a;
+    --leaf: #4cc27a;
+    --leaf-dim: #2f8a55;
+    --amber: #e8a33d;
+    --danger: #c4443a;
+    --paper: #edf2ec;
+    --card: #ffffff;
+    --text: #13251a;
+    --muted: #5b6d61;
+    --line: #d3ddd3;
+    --on-dark: #e6f0e8;
+    --on-dark-muted: #9db5a4;
+    --glow: 76, 194, 122;
+    --font: "Readex Pro", "Segoe UI", Tahoma, "Noto Sans Arabic", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-family: var(--font); background: var(--paper); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  button { font-family: inherit; }
+  :focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; border-radius: 6px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
+
+  /* ---------- Top bar ---------- */
+  .top { position: absolute; inset-inline: 0; top: 0; z-index: 5; }
+  .top .wrap { display: flex; align-items: center; justify-content: space-between; padding-block: 18px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--on-dark); text-decoration: none; }
+  .brand svg { width: 26px; height: 26px; }
+  .top nav { display: flex; gap: 22px; font-size: 14px; }
+  .top nav a { color: var(--on-dark-muted); text-decoration: none; }
+  .top nav a:hover { color: var(--on-dark); }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; background: radial-gradient(120% 90% at 30% 40%, var(--deep-2) 0%, var(--ink) 62%); color: var(--on-dark); padding: 96px 0 84px; overflow: hidden; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: center; gap: 24px; min-height: 560px; }
+  .hero h1 { font-size: clamp(2.2rem, 4.6vw, 3.7rem); line-height: 1.22; font-weight: 600; margin: 0 0 18px; letter-spacing: -0.01em; }
+  .hero p.lead { font-size: 1.1rem; color: var(--on-dark-muted); max-width: 30em; margin: 0 0 28px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font-size: 16px; font-weight: 500; padding: 14px 26px; border-radius: 12px; text-decoration: none; transition: transform .15s, background .15s; }
+  .btn-primary { background: var(--leaf); color: #06200f; }
+  .btn-primary:hover { background: #63d28e; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+  .btn-link { color: var(--on-dark); padding-inline: 4px; border-bottom: 1px solid rgba(230, 240, 232, .35); border-radius: 0; padding-block: 6px; }
+  .btn-link:hover { border-color: var(--on-dark); }
+  .hero .scope { margin-top: 26px; font-size: 14px; color: var(--on-dark-muted); }
+
+  .stage { position: relative; height: 560px; }
+  .stage::before { content: ""; position: absolute; inset: 6% 4%; border-radius: 50%; background: radial-gradient(closest-side, rgba(var(--glow), .30), rgba(var(--glow), 0) 72%); transition: background .8s; }
+  .stage[data-state="disease"] { --glow: 232, 163, 61; }
+  .gl { position: absolute; inset: 0; cursor: grab; touch-action: pan-y; }
+  .gl:active { cursor: grabbing; }
+  .gl canvas { width: 100%; height: 100%; display: block; }
+  .drag-hint { position: absolute; bottom: -34px; inset-inline: 0; text-align: center; font-size: 12.5px; color: var(--on-dark-muted); pointer-events: none; }
+  .stage.nogl .gl, .stage.nogl .drag-hint { display: none; }
+  .stage.nogl { height: auto; }
+
+  /* annotations: the three jobs the model does, in the order it does them */
+  .jobs { list-style: none; margin: 0; padding: 0; position: absolute; inset: 0; pointer-events: none; counter-reset: job; }
+  .jobs li { position: absolute; width: 188px; font-size: 13.5px; line-height: 1.55; color: var(--on-dark); background: rgba(10, 31, 21, .72); border: 1px solid rgba(157, 181, 164, .28); border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(4px); counter-increment: job; }
+  .jobs li::before { content: counter(job); position: absolute; top: -11px; inset-inline-start: 12px; width: 22px; height: 22px; border-radius: 50%; background: var(--leaf); color: #06200f; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .jobs li b { display: block; font-weight: 600; margin-bottom: 2px; }
+  .jobs li span { color: var(--on-dark-muted); }
+  .jobs li::after { content: ""; position: absolute; top: 50%; width: 38px; border-top: 1px dashed rgba(157, 181, 164, .55); }
+  .jobs li:nth-child(1) { top: 9%; left: 0; }
+  .jobs li:nth-child(1)::after { left: 100%; }
+  .jobs li:nth-child(2) { top: 41%; right: 0; }
+  .jobs li:nth-child(2)::after { right: 100%; }
+  .jobs li:nth-child(3) { bottom: 11%; left: 2%; }
+  .jobs li:nth-child(3)::after { left: 100%; }
+
+  /* ---------- Diagnose ---------- */
+  .diagnose { position: relative; margin-top: -32px; background: var(--paper); border-radius: 32px 32px 0 0; padding: 64px 0 72px; }
+  .sec-title { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 600; line-height: 1.3; margin: 0 0 8px; }
+  .sec-sub { color: var(--muted); margin: 0 0 32px; max-width: 40em; }
+  .panel { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: start; }
+  .upload, .result { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
+  .drop { display: grid; place-items: center; min-height: 280px; border: 2px dashed var(--line); border-radius: 14px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; padding: 16px; }
+  .drop.over, .drop:hover { border-color: var(--leaf-dim); background: #f3f9f4; }
+  .drop strong { display: block; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+  .drop svg { width: 44px; height: 44px; color: var(--leaf-dim); margin-bottom: 8px; }
+  .drop img { max-width: 100%; max-height: 320px; border-radius: 12px; display: block; }
+  .upload .btn { width: 100%; margin-top: 14px; }
+  .upload .btn-primary { background: var(--leaf-dim); color: #fff; }
+  .upload .btn-primary:hover { background: #267549; }
+  .err { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fdecea; color: #8d2b22; font-size: 14px; }
+
+  .result .empty { color: var(--muted); display: grid; place-items: center; text-align: center; min-height: 280px; padding: 16px; }
+  .result .empty p { margin: 0; max-width: 24em; }
+  .result .full { display: none; }
+  .result.has .empty { display: none; }
+  .result.has .full { display: block; }
+
+  .verdict { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 18px; align-items: center; }
+  .gauge { position: relative; width: 124px; height: 124px; }
+  .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .gauge .track { stroke: #e3ebe3; }
+  .gauge .arc { stroke: var(--leaf-dim); transition: stroke-dashoffset 1s cubic-bezier(.2, .8, .2, 1), stroke .3s; }
+  .gauge[data-level="mid"] .arc { stroke: var(--amber); }
+  .gauge[data-level="low"] .arc { stroke: var(--danger); }
+  .gauge .num { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.1; }
+  .gauge .num b { font-size: 28px; font-weight: 600; }
+  .gauge .num small { font-size: 11.5px; color: var(--muted); }
+  .names .plant { color: var(--muted); font-size: 15px; }
+  .names .cond { font-size: 1.7rem; font-weight: 600; line-height: 1.25; margin: 2px 0 2px; }
+  .names .en { font-size: 13.5px; color: var(--muted); direction: ltr; text-align: right; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .tag { padding: 3px 12px; border-radius: 99px; font-size: 13px; font-weight: 500; }
+  .tag.ok { background: #e1f4e7; color: #1b6a3b; }
+  .tag.bad { background: #fdecd2; color: #8a5300; }
+  .tag.kind { background: #eef1ee; color: var(--muted); }
+
+  .level { margin: 18px 0 0; padding: 12px 14px; border-radius: 12px; font-size: 14.5px; background: #eef6ef; }
+  .level[data-level="mid"] { background: #fdf1dc; }
+  .level[data-level="low"] { background: #fdecea; }
+  .level a { color: inherit; font-weight: 500; }
+
+  .sumbar-wrap { margin-top: 20px; }
+  .sumbar-wrap h3, .alts h3 { font-size: 14px; font-weight: 500; color: var(--muted); margin: 0 0 8px; }
+  .sumbar { display: flex; height: 16px; border-radius: 99px; overflow: hidden; background: #e3ebe3; }
+  .sumbar i { display: block; height: 100%; transition: width .9s cubic-bezier(.2, .8, .2, 1), opacity .15s; min-width: 0; }
+  .sumbar i + i { border-inline-start: 2px solid #fff; }
+  .sumbar:hover i { opacity: .55; }
+  .sumbar i:hover { opacity: 1; }
+  .c1 { background: var(--leaf-dim); } .c2 { background: #78b98f; } .c3 { background: #a9d4b8; } .c4 { background: repeating-linear-gradient(45deg, #cfd9d0 0 5px, #e3ebe3 5px 10px); }
+  .legend { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; font-size: 14px; }
+  .legend li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+  .legend .sw { width: 14px; height: 14px; border-radius: 4px; }
+  .legend .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend b { font-variant-numeric: tabular-nums; direction: ltr; }
+  .sumline { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+
+  /* ---------- Numbers explainer ---------- */
+  .numbers { background: var(--deep); color: var(--on-dark); padding: 72px 0 80px; }
+  .numbers .sec-sub { color: var(--on-dark-muted); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  .tabs button { background: transparent; color: var(--on-dark-muted); border: 1px solid rgba(157, 181, 164, .3); padding: 10px 18px; border-radius: 99px; font-size: 15px; cursor: pointer; transition: background .15s, color .15s; }
+  .tabs button:hover { color: var(--on-dark); }
+  .tabs button[aria-selected="true"] { background: var(--on-dark); color: var(--ink); border-color: var(--on-dark); font-weight: 500; }
+  .tabpanel { background: var(--deep-2); border: 1px solid rgba(157, 181, 164, .2); border-radius: 20px; padding: 26px; display: none; }
+  .tabpanel.on { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+  .tabpanel h3 { font-size: 1.35rem; margin: 0 0 10px; font-weight: 600; line-height: 1.35; }
+  .tabpanel p { margin: 0 0 12px; color: var(--on-dark-muted); }
+  .tabpanel p strong, .tabpanel li strong { color: var(--on-dark); font-weight: 500; }
+  .tabpanel ul { margin: 0; padding-inline-start: 20px; color: var(--on-dark-muted); }
+  .tabpanel li { margin-bottom: 8px; }
+  .live { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(76, 194, 122, .12); color: var(--on-dark); font-size: 14.5px; display: none; }
+  .live.on { display: block; }
+
+  .demo { background: var(--ink); border-radius: 16px; padding: 20px; }
+  .demo label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 10px; color: var(--on-dark); }
+  .demo label b { direction: ltr; font-variant-numeric: tabular-nums; }
+  .demo input[type=range] { width: 100%; accent-color: var(--leaf); }
+  .demo .sumbar { background: #1d3a2b; margin-top: 14px; }
+  .demo .sumbar i + i { border-color: var(--ink); }
+  .demo .legend { color: var(--on-dark); }
+  .demo .c4 { background: repeating-linear-gradient(45deg, #3b5546 0 5px, #2c4638 5px 10px); }
+  .demo .c1 { background: var(--leaf); } .demo .c2 { background: #7fbf96; } .demo .c3 { background: #b4dcc2; }
+  .demo .total { margin: 12px 0 0; font-size: 13px; color: var(--on-dark-muted); }
+
+  .dots { display: grid; grid-template-columns: repeat(20, 1fr); gap: 5px; direction: ltr; }
+  .dots span { aspect-ratio: 1; border-radius: 50%; background: var(--leaf); }
+  .dots span.miss { background: transparent; border: 2px solid var(--amber); }
+  .dots-cap { margin-top: 12px; font-size: 13.5px; color: var(--on-dark-muted); }
+  .dots-cap .k { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--leaf); vertical-align: -1px; margin-inline-end: 4px; }
+  .dots-cap .k.m { background: transparent; border: 2px solid var(--amber); margin-inline-start: 12px; }
+
+  .bands { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  .bands th, .bands td { text-align: start; padding: 9px 10px; border-bottom: 1px solid rgba(157, 181, 164, .2); }
+  .bands th { color: var(--on-dark-muted); font-weight: 400; font-size: 13px; }
+  .bands td:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bands .d { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 8px; }
+
+  footer { background: var(--ink); color: var(--on-dark-muted); padding: 28px 0 36px; font-size: 13.5px; }
+  footer p { margin: 0 0 6px; max-width: 60em; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 960px) {
+    .hero { padding-top: 84px; }
+    .hero .wrap { grid-template-columns: 1fr; min-height: 0; }
+    .stage { height: auto; }
+    .gl { position: relative; height: 340px; }
+    .stage::before { inset: 0 6% auto; height: 340px; }
+    .jobs { position: static; display: grid; gap: 14px; margin-top: 8px; }
+    .jobs li { position: relative; width: auto; inset: auto !important; }
+    .jobs li::after { display: none; }
+    .drag-hint { position: static; margin-top: 4px; text-align: center; }
+    .panel { grid-template-columns: 1fr; }
+    .tabpanel.on { grid-template-columns: 1fr; gap: 20px; }
+    .top nav { gap: 14px; }
+  }
+  @media (max-width: 520px) {
+    .verdict { grid-template-columns: 1fr; justify-items: start; }
+    .top nav a:nth-child(2) { display: none; }
+    .tabs button { padding: 9px 14px; font-size: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 27C5 14 13 5 27 5c0 14-8 22-20 22Z" fill="#4cc27a"/><path d="M5 27 19 13" stroke="#0a1f15" stroke-width="2" stroke-linecap="round"/></svg>
+      طبيب الأوراق
+    </a>
+    <nav aria-label="التنقل">
+      <a href="#diagnose">شخّص ورقة</a>
+      <a href="#numbers">معنى النسب</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <h1>اعرف ما الذي أصاب الورقة</h1>
+      <p class="lead">ارفع صورة ورقة نبات. يحدّد المودل نوع النبات، ويقول إن كانت الورقة سليمة أم مصابة، ثم يسمّي المرض.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#diagnose">شخّص ورقة</a>
+        <a class="btn btn-link" href="#numbers">ماذا تعني النسب؟</a>
+      </div>
+      <p class="scope">يعرف 38 حالة لـ 14 نباتاً، من التفاح والطماطم إلى العنب والذرة.</p>
+    </div>
+
+    <div class="stage" id="stage" data-state="idle">
+      <div class="gl" id="gl" role="img" aria-label="ورقة نبات ثلاثية الأبعاد يمكن تدويرها بالسحب">
+        <canvas id="leaf"></canvas>
+      </div>
+      <ol class="jobs" aria-label="ما يفعله المودل">
+        <li><b>يحدّد النبات</b><span>تفاح، طماطم، عنب، ذرة وغيرها (14 نباتاً)</span></li>
+        <li><b>يفصل السليمة عن المصابة</b><span>12 حالة سليمة و26 مرضاً</span></li>
+        <li><b>يسمّي المرض</b><span>ويعرض أقرب ثلاثة احتمالات</span></li>
+      </ol>
+      <div class="drag-hint">اسحب الورقة لتدويرها</div>
+    </div>
+  </div>
+</section>
+
+<section class="diagnose" id="diagnose">
+  <div class="wrap">
+    <h2 class="sec-title">جرّب على ورقة</h2>
+    <p class="sec-sub">صوّر ورقة واحدة قريبة وواضحة، ويُفضّل أن تكون على خلفية بسيطة وبإضاءة جيدة.</p>
+
+    <div class="panel">
+      <div class="upload">
+        <label class="drop" id="drop" for="file">
+          <input type="file" id="file" class="sr" accept="image/*">
+          <span id="hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+            <strong>اختر صورة أو اسحبها إلى هنا</strong>
+            JPG أو PNG، حتى 8 ميغابايت
+          </span>
+          <img id="preview" alt="الصورة المختارة" hidden>
+        </label>
+        <button class="btn btn-primary" id="go" disabled>شخّص الصورة</button>
+        <div class="err" id="err" role="alert"></div>
+      </div>
+
+      <div class="result" id="result" aria-live="polite">
+        <div class="empty"><p>ستظهر هنا نتيجة التشخيص: اسم النبات والحالة، ونسبة ثقة المودل، وأقرب ثلاثة احتمالات.</p></div>
+        <div class="full">
+          <div class="verdict">
+            <div class="gauge" id="gauge" data-level="high">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="11"/>
+                <circle class="arc" id="arc" cx="60" cy="60" r="52" fill="none" stroke-width="11" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+              </svg>
+              <div class="num"><b id="pct">0%</b><small>ثقة المودل</small></div>
+            </div>
+            <div class="names">
+              <div class="plant" id="plantAr"></div>
+              <div class="cond" id="condAr"></div>
+              <div class="en" id="en"></div>
+              <div class="tags"><span class="tag" id="state"></span><span class="tag kind" id="kind" hidden></span></div>
+            </div>
+          </div>
+
+          <p class="level" id="level"></p>
+
+          <div class="sumbar-wrap">
+            <h3>كيف توزعت الـ 100% بين الاحتمالات</h3>
+            <div class="sumbar" id="sumbar" role="img" aria-label="توزيع نسب الاحتمالات"></div>
+            <ul class="legend" id="legend"></ul>
+            <p class="sumline">المجموع دائماً 100%. ارتفاع نسبة احتمال يعني انخفاض نسبة غيره. <a href="#numbers">اشرح لي أكثر</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="numbers" id="numbers">
+  <div class="wrap">
+    <h2 class="sec-title">ما معنى هذه النسب؟</h2>
+    <p class="sec-sub">في الصفحة رقمان يتشابهان في الشكل ويختلفان في المعنى: نسبة الثقة في صورتك، ودقة المودل بوجه عام.</p>
+
+    <div class="tabs" role="tablist" aria-label="شرح النسب">
+      <button role="tab" id="tab1" aria-controls="pane1" aria-selected="true">نسبة الثقة</button>
+      <button role="tab" id="tab2" aria-controls="pane2" aria-selected="false" tabindex="-1">دقة المودل 94.6%</button>
+      <button role="tab" id="tab3" aria-controls="pane3" aria-selected="false" tabindex="-1">ما لا تعنيه</button>
+    </div>
+
+    <div class="tabpanel on" id="pane1" role="tabpanel" aria-labelledby="tab1">
+      <div>
+        <h3>الثقة هي حصة كل احتمال من 100%</h3>
+        <p>لكل صورة، يعطي المودل كل واحدة من الحالات الـ 38 رقماً، ثم يجمع الأرقام في 100%. الحالة التي تأخذ أكبر حصة هي التشخيص، وحصتها هي <strong>نسبة الثقة</strong>.</p>
+        <p>مثال: 98% تعني أن المودل وضع تقريباً كل الحصة في حالة واحدة. وإذا ظهر 40% فهو متردد بين حالتين أو ثلاث.</p>
+        <p>حرّك المؤشر وانظر كيف تنقص بقية الاحتمالات كلما زادت الأولى.</p>
+        <div class="live" id="live"></div>
+      </div>
+      <div class="demo">
+        <label for="slider"><span>ثقة الاحتمال الأول</span><b id="sliderVal">80%</b></label>
+        <input type="range" id="slider" min="25" max="99" value="80">
+        <div class="sumbar" id="demoBar" role="img" aria-label="توزيع تجريبي"></div>
+        <ul class="legend" id="demoLegend"></ul>
+        <p class="total">المجموع: 100%</p>
+      </div>
+    </div>
+
+    <div class="tabpanel" id="pane2" role="tabpanel" aria-labelledby="tab2" hidden>
+      <div>
+        <h3>94.6% هي دقة المودل على صور اختبار لم يرها</h3>
+        <p>بعد التدريب، اختبرنا المودل على <strong>7,738 صورة</strong> لم يتدرب عليها. صنّف منها نحو <strong>7,321 صورة</strong> تصنيفاً صحيحاً، أي <strong>94.6%</strong>.</p>
+        <p>هذا الرقم يصف المودل كله، وليس صورتك. ولا يعني أن كل تشخيص تحصل عليه صحيح بهذه النسبة، خصوصاً مع صور تختلف عن صور التدريب.</p>
+        <p>الأضعف في الاختبار: أوراق البطاطس والتوت العليق السليمة، وحلم العنكبوت في الطماطم.</p>
+      </div>
+      <div>
+        <div class="dots" id="dots" aria-hidden="true"></div>
+        <p class="dots-cap"><span class="k"></span>صحيح، نحو 95 من كل 100 <span class="k m"></span>خطأ، نحو 5 من كل 100</p>
+      </div>
+    </div>
+
+    <div class="tabpanel" id="pane3" role="tabpanel" aria-labelledby="tab3" hidden>
+      <div>
+        <h3>ما لا تقوله النسبة</h3>
+        <ul>
+          <li><strong>ليست نسبة إصابة الورقة.</strong> 98% لا تعني أن 98% من الورقة مصابة، ولا أن المرض شديد.</li>
+          <li><strong>ليست ضمان صحة.</strong> قد يكون المودل واثقاً ومخطئاً، خصوصاً مع صور حقول حقيقية، فالتدريب كان على صور بخلفية بسيطة.</li>
+          <li><strong>لا يقول "لا أعرف".</strong> يوزع الـ 100% دائماً على الحالات الـ 38 المعروفة له، حتى لو كانت الصورة لشيء آخر.</li>
+        </ul>
+      </div>
+      <div>
+        <table class="bands">
+          <thead><tr><th>نسبة الثقة</th><th>كيف تتصرف</th></tr></thead>
+          <tbody>
+            <tr><td><span class="d" style="background:var(--leaf)"></span>90% فأكثر</td><td>ثقة عالية. النتيجة جديرة بالاهتمام، وتأكد من مختص عند القرار.</td></tr>
+            <tr><td><span class="d" style="background:var(--amber)"></span>60% إلى 90%</td><td>ثقة متوسطة. قارن بالاحتمال الثاني وصوّر الورقة مرة أخرى.</td></tr>
+            <tr><td><span class="d" style="background:var(--danger)"></span>أقل من 60%</td><td>ثقة منخفضة. تظهر الصفحة تحذيراً، ولا تعتمد على النتيجة.</td></tr>
+          </tbody>
+        </table>
+        <p class="dots-cap">حد 60% معتمد في الخدمة. أما حد 90% فتقسيم للشرح فقط.</p>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>النتيجة استرشادية وليست بديلاً عن رأي مهندس زراعي.</p>
+    <p>المودل شبكة عصبية التفافية (CNN) مدرَّبة على صور PlantVillage، وتعمل عبر FastAPI. دقته على صور الحقول الحقيقية أقل من دقته على صور الاختبار.</p>
+  </div>
+</footer>
+
+<script src="/static/vendor/three.min.js"></script>
+<script>
+/* ===================== 3D leaf ===================== */
+const LeafScene = (function () {
+  const stage = document.getElementById("stage");
+  const holder = document.getElementById("gl");
+  const canvas = document.getElementById("leaf");
+  const noop = { setState() {}, setScanning() {} };
+  if (typeof THREE === "undefined") { stage.classList.add("nogl"); return noop; }
+
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); }
+  catch (e) { stage.classList.add("nogl"); return noop; }
+
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+  camera.position.set(0, 0, 11);
+
+  scene.add(new THREE.HemisphereLight(0xdfffe8, 0x0a2a18, 0.85));
+  const key = new THREE.DirectionalLight(0xffffff, 1.15); key.position.set(3, 4, 6); scene.add(key);
+  const rim = new THREE.PointLight(0x7dffb0, 1.1, 20); rim.position.set(-4, -2, -3); scene.add(rim);
+
+  /* leaf texture drawn on a canvas: base colour, midrib, side veins, optional spots */
+  const TW = 512, TH = 1024;
+  const tc = document.createElement("canvas"); tc.width = TW; tc.height = TH;
+  const tctx = tc.getContext("2d");
+  const tex = new THREE.CanvasTexture(tc);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = 4;
+
+  function rng(seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+  function width(u) { return Math.pow(Math.sin(Math.PI * Math.pow(u, 0.72)), 0.85) * (1 + 0.025 * Math.sin(u * 70)); }
+
+  function paint(state) {
+    const c = tctx, r = rng(7);
+    const g = c.createLinearGradient(0, TH, 0, 0);
+    g.addColorStop(0, "#2b7a3f"); g.addColorStop(0.5, state === "disease" ? "#4f9a45" : "#3f9b55"); g.addColorStop(1, state === "disease" ? "#78a846" : "#66bb70");
+    c.fillStyle = g; c.fillRect(0, 0, TW, TH);
+    for (let i = 0; i < 900; i++) { c.fillStyle = "rgba(255,255,255," + (r() * 0.05) + ")"; c.beginPath(); c.arc(r() * TW, r() * TH, 1 + r() * 3, 0, 7); c.fill(); }
+    // veins
+    c.lineCap = "round";
+    for (let k = 1; k <= 15; k++) {
+      const y0 = TH - k * (TH / 17), reach = 210 * Math.max(0.25, width(1 - y0 / TH) );
+      [-1, 1].forEach(function (s) {
+        c.strokeStyle = "rgba(210,255,215,.34)"; c.lineWidth = 3.2 - k * 0.12;
+        c.beginPath(); c.moveTo(TW / 2, y0); c.quadraticCurveTo(TW / 2 + s * reach * 0.6, y0 - 40, TW / 2 + s * reach, y0 - 120); c.stroke();
+      });
+    }
+    c.strokeStyle = "rgba(225,255,225,.62)"; c.lineWidth = 9; c.beginPath(); c.moveTo(TW / 2, TH); c.lineTo(TW / 2, 0); c.stroke();
+    if (state === "disease") {          // illustrative spots only, not a measure of severity
+      const q = rng(11);
+      for (let i = 0; i < 26; i++) {
+        const u = 0.12 + q() * 0.76, v = (q() * 2 - 1) * 0.78, w = width(u);
+        const x = TW / 2 + v * w * (TW / 2) * 0.92, y = TH - u * TH, rad = 6 + q() * 13;
+        const halo = c.createRadialGradient(x, y, rad * 0.4, x, y, rad * 2);
+        halo.addColorStop(0, "rgba(214,176,58,.75)"); halo.addColorStop(1, "rgba(214,176,58,0)");
+        c.fillStyle = halo; c.beginPath(); c.arc(x, y, rad * 2, 0, 7); c.fill();
+        c.fillStyle = "#4a2a14"; c.beginPath(); c.ellipse(x, y, rad, rad * (0.7 + q() * 0.3), q() * 3, 0, 7); c.fill();
+      }
+    }
+    tex.needsUpdate = true;
+  }
+  paint("idle");
+
+  /* geometry: a grid across (v) and along (u) the blade, shaped by the width profile */
+  const NU = 90, NV = 30, L = 4.4, W = 1.6;
+  const pos = [], uvs = [], idx = [];
+  for (let i = 0; i <= NU; i++) {
+    const u = i / NU, w = width(u);
+    for (let j = 0; j <= NV; j++) {
+      const v = j / NV * 2 - 1;
+      const x = v * w * W, y = (u - 0.5) * L;
+      const z = 0.34 * v * v * w - 0.5 * u * u + 0.05 * Math.sin(u * 14 + v * 5) * w;
+      pos.push(x, y, z); uvs.push(v * 0.5 + 0.5, u);
+    }
+  }
+  for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+    const a = i * (NV + 1) + j, b = a + 1, c2 = a + NV + 1, d = c2 + 1;
+    idx.push(a, c2, b, b, c2, d);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+
+  const blade = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide }));
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.8, 10), new THREE.MeshStandardMaterial({ color: 0x3a8a4a, roughness: 0.6 }));
+  stem.position.set(0, -L / 2 - 0.32, 0);
+  const group = new THREE.Group(); group.add(blade); group.add(stem);
+
+  const scan = new THREE.Mesh(new THREE.PlaneGeometry(W * 2.4, 0.07), new THREE.MeshBasicMaterial({ color: 0x8dffb0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  scan.position.z = 0.5; group.add(scan);
+
+  group.rotation.set(-0.12, 0, 0.18);
+  scene.add(group);
+
+  /* interaction: drag to rotate, eases back to its slow sway */
+  let dragging = false, lastX = 0, lastY = 0, userY = 0, userX = 0, scanning = false, visible = true, t0 = performance.now();
+  holder.addEventListener("pointerdown", function (e) { dragging = true; lastX = e.clientX; lastY = e.clientY; holder.setPointerCapture(e.pointerId); });
+  holder.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    userY += (e.clientX - lastX) * 0.012; userX += (e.clientY - lastY) * 0.008;
+    userX = Math.max(-0.9, Math.min(0.9, userX)); lastX = e.clientX; lastY = e.clientY;
+    if (reduce) draw(performance.now());
+  });
+  function up() { dragging = false; }
+  holder.addEventListener("pointerup", up); holder.addEventListener("pointercancel", up);
+
+  function resize() {
+    const w = holder.clientWidth, h = holder.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    camera.position.z = w / h < 0.9 ? 13 : 11; camera.updateProjectionMatrix();
+    draw(performance.now());
+  }
+  new ResizeObserver(resize).observe(holder);
+
+  function draw(now) {
+    const t = (now - t0) / 1000;
+    if (!dragging) { userY *= 0.965; userX *= 0.965; }
+    const sway = reduce ? 0 : Math.sin(t * 0.45) * 0.45;
+    group.rotation.y = sway + userY + (scanning ? Math.sin(t * 1.2) * 0.1 : 0);
+    group.rotation.x = -0.12 + userX;
+    group.position.y = reduce ? 0 : Math.sin(t * 0.9) * 0.1;
+    if (scanning) {
+      const p = (t * 0.9) % 1;
+      scan.position.y = (p - 0.5) * L; scan.material.opacity = 0.85 * Math.sin(Math.PI * p);
+    } else scan.material.opacity = 0;
+    renderer.render(scene, camera);
+  }
+  function loop(now) { if (visible && !document.hidden) draw(now); if (!reduce || scanning) requestAnimationFrame(loop); }
+  new IntersectionObserver(function (en) { visible = en[0].isIntersecting; }).observe(holder);
+  if (reduce) { resize(); } else requestAnimationFrame(loop);
+
+  return {
+    setState(s) { stage.dataset.state = s; paint(s); if (reduce) draw(performance.now()); },
+    setScanning(on) { scanning = on; if (reduce && on) requestAnimationFrame(loop); }
+  };
+})();
+
+/* ===================== Names (Arabic) ===================== */
+const PLANTS = {
+  "apple": "تفاح", "blueberry": "توت أزرق", "cherry (including sour)": "كرز", "corn (maize)": "ذرة",
+  "grape": "عنب", "orange": "برتقال", "peach": "خوخ", "pepper, bell": "فلفل حلو", "potato": "بطاطس",
+  "raspberry": "توت العليق", "soybean": "فول الصويا", "squash": "قرع", "strawberry": "فراولة", "tomato": "طماطم"
+};
+const KIND = { fungal: "مسبّب فطري", oomy: "مسبّب فطري-شبيه", bacterial: "مسبّب بكتيري", viral: "مسبّب فيروسي", mite: "آفة (حلم)" };
+const COND = {
+  "healthy": ["سليمة", null],
+  "apple scab": ["جرب التفاح", "fungal"],
+  "black rot": ["العفن الأسود", "fungal"],
+  "cedar apple rust": ["صدأ التفاح الأرزي", "fungal"],
+  "powdery mildew": ["البياض الدقيقي", "fungal"],
+  "cercospora leaf spot gray leaf spot": ["تبقع الأوراق السركوسبوري (البقعة الرمادية)", "fungal"],
+  "common rust": ["الصدأ الشائع", "fungal"],
+  "northern leaf blight": ["لفحة الأوراق الشمالية", "fungal"],
+  "esca (black measles)": ["إسكا (الحصبة السوداء)", "fungal"],
+  "leaf blight (isariopsis leaf spot)": ["لفحة الأوراق (تبقع إيزاريوبسيس)", "fungal"],
+  "haunglongbing (citrus greening)": ["اخضرار الحمضيات (هوانغلونغبينغ)", "bacterial"],
+  "bacterial spot": ["التبقع البكتيري", "bacterial"],
+  "early blight": ["اللفحة المبكرة", "fungal"],
+  "late blight": ["اللفحة المتأخرة", "oomy"],
+  "leaf scorch": ["احتراق الأوراق", "fungal"],
+  "leaf mold": ["عفن الأوراق", "fungal"],
+  "septoria leaf spot": ["تبقع الأوراق السبتوري", "fungal"],
+  "spider mites two-spotted spider mite": ["حلم العنكبوت ذو البقعتين", "mite"],
+  "target spot": ["التبقع الهدفي", "fungal"],
+  "tomato yellow leaf curl virus": ["فيروس تجعّد واصفرار أوراق الطماطم", "viral"],
+  "tomato mosaic virus": ["فيروس موزاييك الطماطم", "viral"]
+};
+const plantAr = p => PLANTS[p.toLowerCase()] || p;
+const condInfo = c => COND[c.toLowerCase()] || [c, null];
+
+/* ===================== Probability bar ===================== */
+const SEG = ["c1", "c2", "c3", "c4"];
+function fmt(x) { return (Math.round(x * 10) / 10).toFixed(1) + "%"; }
+function renderBar(barEl, legendEl, parts) {
+  barEl.innerHTML = parts.map((p, i) => '<i class="' + SEG[i] + '" style="width:' + p.pct + '%" title="' + p.name + ': ' + fmt(p.pct) + '"></i>').join("");
+  legendEl.innerHTML = parts.map((p, i) => '<li><span class="sw ' + SEG[i] + '"></span><span class="nm">' + p.name + '</span><b>' + fmt(p.pct) + '</b></li>').join("");
+}
+
+/* ===================== Diagnose ===================== */
+const $ = id => document.getElementById(id);
+const fileInput = $("file"), drop = $("drop"), go = $("go"), errBox = $("err");
+let current = null, last = null;
+
+function setFile(f) {
+  if (!f) return;
+  if (!f.type.startsWith("image/")) { showErr("الملف ليس صورة. اختر ملف JPG أو PNG."); return; }
+  if (f.size > 8 * 1024 * 1024) { showErr("الصورة أكبر من 8 ميغابايت. اختر صورة أصغر."); return; }
+  current = f; errBox.style.display = "none";
+  $("preview").src = URL.createObjectURL(f); $("preview").hidden = false; $("hint").hidden = true;
+  go.disabled = false;
+}
+function showErr(m) { errBox.textContent = m; errBox.style.display = "block"; }
+
+fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+["dragenter", "dragover"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", ev => setFile(ev.dataTransfer.files[0]));
+
+go.addEventListener("click", async () => {
+  if (!current) return;
+  go.disabled = true; go.textContent = "جاري التحليل…"; errBox.style.display = "none";
+  LeafScene.setScanning(true);
+  try {
+    const fd = new FormData(); fd.append("file", current);
+    const [r] = await Promise.all([fetch("/predict", { method: "POST", body: fd }), new Promise(res => setTimeout(res, 1100))]);
+    let data = {}; try { data = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error(data.detail || "تعذّر التحليل. حاول مرة أخرى.");
+    show(data);
+  } catch (e) {
+    showErr(e.message === "Failed to fetch" ? "تعذّر الاتصال بالخادم. إذا كانت الخدمة مجانية على Render فقد تحتاج دقيقة لتستيقظ، حاول بعد قليل." : e.message);
+  } finally {
+    LeafScene.setScanning(false); go.disabled = false; go.textContent = "شخّص الصورة";
+  }
+});
+
+function level(c) { return c >= 0.9 ? "high" : c >= 0.6 ? "mid" : "low"; }
+const LEVEL_TEXT = {
+  high: "ثقة عالية: المودل يرى هذه الحالة الأقرب بفارق كبير عن غيرها.",
+  mid: "ثقة متوسطة: قارن بالاحتمال الثاني، وجرّب صورة أوضح للورقة.",
+  low: "ثقة منخفضة: لا تعتمد على هذا التشخيص. صوّر ورقة واحدة على خلفية بسيطة وبإضاءة جيدة."
+};
+
+function show(d) {
+  last = d;
+  const p = d.prediction, conf = p.confidence, lv = level(conf);
+  const [condAr, kind] = condInfo(p.condition);
+  $("plantAr").textContent = plantAr(p.plant);
+  $("condAr").textContent = condAr;
+  $("en").textContent = p.plant + " / " + p.condition;
+  const st = $("state"); st.textContent = p.healthy ? "سليمة" : "مصابة"; st.className = "tag " + (p.healthy ? "ok" : "bad");
+  const k = $("kind"); if (kind && !p.healthy) { k.textContent = KIND[kind]; k.hidden = false; } else k.hidden = true;
+
+  const g = $("gauge"); g.dataset.level = lv;
+  const arc = $("arc"), C = 326.7; arc.style.strokeDashoffset = C;
+  requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = C * (1 - conf); }));
+  countUp($("pct"), conf * 100);
+
+  const lvl = $("level"); lvl.dataset.level = lv;
+  lvl.innerHTML = LEVEL_TEXT[lv] + ' <a href="#numbers">ماذا تعني هذه النسبة؟</a>';
+
+  const parts = d.top3.map(t => ({ name: plantAr(t.plant) + " - " + condInfo(t.condition)[0], pct: t.confidence * 100 }));
+  const rest = Math.max(0, 100 - parts.reduce((s, x) => s + x.pct, 0));
+  parts.push({ name: "باقي الفئات (35 فئة)", pct: rest });
+  renderBar($("sumbar"), $("legend"), parts);
+
+  $("result").classList.add("has");
+  LeafScene.setState(p.healthy ? "healthy" : "disease");
+  updateLive();
+  if (matchMedia("(max-width: 960px)").matches) $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function countUp(el, to) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = Math.round(to) + "%"; return; }
+  const t0 = performance.now(), dur = 900;
+  (function tick(now) {
+    const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(to * e) + "%";
+    if (k < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
+/* ===================== Explainer ===================== */
+function updateLive() {
+  const el = $("live");
+  if (!last) { el.classList.remove("on"); return; }
+  const t = last.top3.map(x => x.confidence * 100), rest = Math.max(0, 100 - t[0] - t[1] - t[2]);
+  el.textContent = "في نتيجتك الأخيرة: " + fmt(t[0]) + " للاحتمال الأول، و" + fmt(t[1]) + " للثاني، و" + fmt(t[2]) + " للثالث، والباقي (" + fmt(rest) + ") موزع على 35 حالة أخرى.";
+  el.classList.add("on");
+}
+
+const slider = $("slider");
+function renderDemo() {
+  const a = +slider.value, rest = 100 - a;
+  $("sliderVal").textContent = a + "%";
+  renderBar($("demoBar"), $("demoLegend"), [
+    { name: "الاحتمال الأول", pct: a },
+    { name: "الاحتمال الثاني", pct: rest * 0.55 },
+    { name: "الاحتمال الثالث", pct: rest * 0.25 },
+    { name: "باقي الفئات", pct: rest * 0.20 }
+  ]);
+}
+slider.addEventListener("input", renderDemo); renderDemo();
+
+$("dots").innerHTML = Array.from({ length: 100 }, (_, i) => '<span class="' + (i < 95 ? "" : "miss") + '"></span>').join("");
+
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function pick(t) {
+  tabs.forEach(b => {
+    const on = b === t, pane = $(b.getAttribute("aria-controls"));
+    b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1;
+    pane.hidden = !on; pane.classList.toggle("on", on);
+  });
+}
+tabs.forEach((b, i) => {
+  b.addEventListener("click", () => pick(b));
+  b.addEventListener("keydown", e => {
+    const d = e.key === "ArrowLeft" ? 1 : e.key === "ArrowRight" ? -1 : 0;   // RTL: left = next
+    if (!d) return; e.preventDefault();
+    const n = tabs[(i + d + tabs.length) % tabs.length]; n.focus(); pick(n);
+  });
+});
+document.querySelectorAll('a[href="#numbers"]').forEach(a => a.addEventListener("click", () => pick(tabs[0])));
+</script>
+</body>
+</html>
