@@ -2,7 +2,7 @@
 
 A deep learning project that classifies plant leaf images into **38 classes** (different diseases and healthy leaves) using a **Convolutional Neural Network (CNN) built from scratch** with TensorFlow / Keras.
 
-> **Project status:** Work in progress. Data preparation, cleaning, and leakage-safe splitting are complete, and the input pipeline and CNN architecture are built. Training and evaluation are next.
+> **Project status:** The CNN is trained and evaluated (**94.6% test accuracy**). A FastAPI web service for the model is built; deployment and error analysis are next.
 
 ---
 
@@ -103,12 +103,12 @@ The dataset contains modified copies (flipped, rotated, slightly different shots
 
 | Subset | Images | Share |
 |---|---|---|
-| Train | 38,777 | 71.4% |
-| Validation | 7,760 | 14.3% |
-| Test | 7,747 | 14.3% |
+| Train | 38,792 | 71.5% |
+| Validation | 7,754 | 14.3% |
+| Test | 7,738 | 14.3% |
 
 - Group overlap between train/val, train/test, and val/test: **0 / 0 / 0**.
-- Smallest class in the test set: 22 images.
+- Smallest class in the test set: 22 images (`Potato___healthy`).
 - The split tables are saved as `train.csv`, `val.csv`, and `test.csv`.
 
 ### Stage 4: Model building and training
@@ -139,13 +139,48 @@ Image → Augmentation → Rescaling (÷255)
 | `EarlyStopping` | Patience 5, restores the best weights |
 | `ReduceLROnPlateau` | Halves the learning rate after 2 epochs without improvement |
 
-**Training results (validation set):** _to be added after training._
+**Training results (validation set):**
 
-### Stage 5: Evaluation (upcoming)
+Training stopped automatically at epoch 16 (early stopping). The best epoch was **epoch 11**, and its weights were restored.
 
-- Accuracy, per-class precision / recall / F1, and a confusion matrix on the **test set** (evaluated once, after all tuning is finished).
-- Error analysis of the weakest classes.
-- Test the model on images from outside the dataset to measure real-world performance.
+| | Epoch 11 (best) | Epoch 16 (last) |
+|---|---|---|
+| Train accuracy | 97.6% | 98.7% |
+| Validation accuracy | **94.3%** | 93.7% |
+| Validation loss | 0.183 | 0.213 |
+
+Validation accuracy fluctuated noticeably between epochs (from about 56% up to 94%) while training accuracy rose steadily. This is common for a from-scratch CNN with BatchNormalization at a relatively high learning rate. The gap between training and validation accuracy at the end indicates mild overfitting.
+
+### Stage 5: Evaluation on the test set
+
+The test set was evaluated once, with the best checkpoint (`cnn_best.keras`).
+
+| Metric | Value |
+|---|---|
+| **Test accuracy** | **94.6%** |
+| Macro F1 | 0.935 |
+| Weighted F1 | 0.946 |
+
+Test accuracy (94.6%) is consistent with validation accuracy (94.3%), so the validation set was not overfitted.
+
+**Strongest classes (F1 ≥ 0.99):** `Corn_(maize)___healthy` (1.000), `Corn_(maize)___Common_rust_` (0.997), `Strawberry___Leaf_scorch` (0.991), `Tomato___Tomato_mosaic_virus` (0.991), `Orange___Haunglongbing_(Citrus_greening)` (0.990).
+
+**Weakest classes (lowest F1):**
+
+| Class | Precision | Recall | F1 | Test images |
+|---|---|---|---|---|
+| `Potato___healthy` | 0.895 | 0.773 | 0.829 | 22 |
+| `Raspberry___healthy` | 0.875 | 0.808 | 0.840 | 52 |
+| `Tomato___Spider_mites Two-spotted_spider_mite` | 0.957 | 0.748 | 0.840 | 238 |
+| `Pepper,_bell___healthy` | 1.000 | 0.776 | 0.874 | 210 |
+| `Strawberry___healthy` | 0.947 | 0.831 | 0.885 | 65 |
+| `Apple___healthy` | 0.801 | 0.987 | 0.885 | 233 |
+
+**Observations:**
+- Several "healthy" classes and a few small classes are the weakest. Some classes (`Apple___healthy`, `Tomato___healthy`) have high recall but lower precision, meaning other images are being assigned to them. Others (`Pepper,_bell___healthy`, `Tomato___Spider_mites`) have high precision but lower recall, meaning their images are being assigned elsewhere.
+- Very small classes such as `Potato___healthy` (22 test images) are sensitive to a single error.
+
+**Planned:** a confusion-matrix analysis of the most frequent mistakes, and testing on images from outside the dataset to measure real-world performance (PlantVillage images are lab-style photos with plain backgrounds, so accuracy on field photos is expected to be lower).
 
 ## 6. Roadmap
 
@@ -155,8 +190,11 @@ Image → Augmentation → Rescaling (÷255)
 - [x] Handle data leakage with perceptual hashing (pHash, 8 orientations)
 - [x] Split the dataset (train / val / test) with `StratifiedGroupKFold`
 - [x] Build the image loading pipeline (`tf.data`)
-- [x] Train the CNN
-- [x] Final evaluation on the test set and error analysis
+- [x] Train the CNN (best validation accuracy 94.3%)
+- [x] Final evaluation on the test set (accuracy 94.6%)
+- [x] Build a FastAPI service and web interface for the model
+- [ ] Deploy the service (Render)
+- [ ] Confusion-matrix error analysis
 - [ ] Test on real-world photos from outside the dataset
 
 ## 7. Getting Started
