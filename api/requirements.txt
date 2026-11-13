@@ -5,4 +5,4 @@ pillow
 numpy
 # مهم: يجب أن يطابق إصدار TensorFlow الذي دربت به المودل في Colab
 # (شغّل في Colab:  import tensorflow as tf; print(tf.__version__) ثم عدّل الرقم هنا)
-tensorflow-cpu==2.19.0
+tensorflow-cpu==2.21.0
