@@ -1,8 +1,8 @@
 # 🌿 Plant Disease Classification with CNN
 
-A deep learning project that classifies plant leaf images into **38 classes** (different diseases and healthy leaves) using a **Convolutional Neural Network (CNN) built from scratch** with TensorFlow / Keras.
+A deep learning project that classifies plant leaf images into **38 classes** (different diseases and healthy leaves) using a Convolutional Neural Network (CNN) built in Python.
 
-> **Project status:** The CNN is trained and evaluated (**94.6% test accuracy**). A FastAPI web service for the model is built; deployment and error analysis are next.
+> **Project status:** Work in progress. Data preparation, cleaning, and splitting are complete, and the image loading pipeline and model definition are built. Training and evaluation are underway.
 
 ---
 
@@ -16,7 +16,7 @@ The goal is a model that takes a **photo of a plant leaf** and determines:
 
 ## 2. Solution
 
-Build a **CNN** for image classification that automatically learns disease features from images (spots, discoloration, deformities) instead of relying on hand-crafted rules. The network is designed and trained from scratch (no pretrained weights).
+Build a **CNN** for image classification that automatically learns disease features from images (spots, discoloration, deformities) instead of relying on hand-crafted rules.
 
 Output: a probability for each of the 38 classes. The class with the highest probability is the diagnosis.
 
@@ -37,23 +37,22 @@ The dataset ships in three versions of the same images (`color`, `grayscale`, `s
 ## 4. Tech Stack
 
 - **Python**
-- **TensorFlow / Keras**: model building and training (`tf.data` input pipeline)
+- **TensorFlow / Keras**: model building and training, and the image loading pipeline (`tf.data`)
 - **Pandas / NumPy**: dataset table and data processing
 - **Pillow (PIL)**: reading and validating images
-- **imagehash + SciPy**: perceptual hashing and grouping of near-duplicate images
-- **scikit-learn**: grouped, stratified splitting and evaluation metrics
+- **scikit-learn**: dataset splitting, class weights, and evaluation metrics
 - **Matplotlib**: plots
 - **hashlib (MD5)**: exact duplicate detection
-- **Google Colab (T4 GPU)**: runtime environment, with **Google Drive** for storing tables and checkpoints
-- **Kaggle API**: downloading the dataset directly to Colab's local disk
+- **concurrent.futures (ThreadPoolExecutor)**: parallel file inspection
+- **Kaggle API**: downloading the dataset from Kaggle
+- **Google Colab**: runtime environment (with GPU), and **Google Drive** for storing tables and the model
 
 ## 5. Project Workflow
 
 ### Stage 1: Data preparation and inspection
 
-- Download the dataset from Kaggle straight to Colab's local disk and work with the `color` version.
-  Copying ~54k small files from Drive was far too slow, so the dataset is downloaded from Kaggle in each new session instead.
-- Build a **DataFrame** with one row per image:
+- Download the dataset from Kaggle through the API directly onto Colab's local disk, extracting only the `color` folder (reading from local disk is much faster than from Drive).
+- Build a **DataFrame** with one row per image, inspected in parallel:
 
 | Column | Description |
 |---|---|
@@ -74,141 +73,97 @@ Since the data is images rather than tables, "null values" correspond to corrupt
 | Corrupted or unreadable files | **0** |
 | Zero-byte files | **0** |
 | Image dimensions | **256×256** for all images |
+| Color mode | 54,304 RGB images and one RGBA image (its alpha channel is fully opaque, so it is converted to RGB at load time) |
 | Duplicate images (identical bytes) | **21** images, **removed** |
 | Images appearing under more than one class | **0** |
 
-**Outcome:** from 54,305 images to **54,284 clean images**. No files were deleted from the source. The table was filtered instead, and the clean table was saved to Drive.
+**Outcome:** from 54,305 images to **54,284 clean images**. No files were deleted from the source. The table was filtered instead, and the clean table (`clean_df.csv`) was saved to Drive. The table is sorted by path so the result is identical across sessions.
 
-The class distribution is **imbalanced** (about a 36× gap between the smallest and largest class). It is handled with a **stratified** split and data augmentation. Class weights were not used.
+The class distribution is also **imbalanced** (about a 36× gap between the smallest and largest class), which is handled during training with class weights.
 
-### Stage 3: Dataset splitting (leakage-safe)
+### Stage 3: Dataset splitting
 
-The dataset contains modified copies (flipped, rotated, slightly different shots) of the same leaf. If one copy lands in train and another in test, accuracy looks higher than it really is.
+- **Stratified** split into **70% train / 15% validation / 15% test** using `train_test_split` with `stratify` and `random_state=42`, so class proportions stay similar in every subset.
+- The splits are saved as fixed files (`train.csv`, `val.csv`, `test.csv`), so the split does not change between sessions and the test set stays untouched until the final evaluation.
+- **Note:** the images were taken under lab conditions with a uniform background and may include close shots of the same leaf, so test accuracy may be slightly optimistic. Testing the model on images from outside the dataset is recommended.
 
-**Method:**
-1. Compute a **perceptual hash (pHash)** for each image in **8 orientations** (4 rotations × horizontal flip), so rotated or flipped copies are still matched.
-2. Compare hashes **within each class** and link images whose minimum Hamming distance is **≤ 2** (out of 64 bits).
-3. Merge linked images into **groups** using connected components.
-4. Split with `StratifiedGroupKFold` so that no group is spread across more than one subset.
+### Stage 4: Image pipeline and model
 
-**Threshold tuning:** a threshold of 4 caused "chaining" (the largest group reached 1,133 unrelated images), so it was lowered to 2.
+**Image pipeline (`tf.data`):**
+- Read each file, decode it to 3 RGB channels, and resize to **128×128**.
+- Shuffle training data only, then batch (64) and `prefetch` for faster training.
+- Normalization (÷255) happens inside the model itself.
 
-| Grouping result (threshold = 2) | Value |
-|---|---|
-| Total groups | 54,019 |
-| Groups with more than one image | 159 |
-| Largest group | 27 images |
-
-**Final split:**
-
-| Subset | Images | Share |
-|---|---|---|
-| Train | 38,792 | 71.5% |
-| Validation | 7,754 | 14.3% |
-| Test | 7,738 | 14.3% |
-
-- Group overlap between train/val, train/test, and val/test: **0 / 0 / 0**.
-- Smallest class in the test set: 22 images (`Potato___healthy`).
-- The split tables are saved as `train.csv`, `val.csv`, and `test.csv`.
-
-### Stage 4: Model building and training
-
-**Input pipeline (`tf.data`):** read JPEG → decode → resize to **128×128** → batch of 64 → prefetch. Pixel values are scaled to [0, 1] inside the model with a `Rescaling(1/255)` layer.
-
-**Architecture (CNN from scratch):**
+**CNN architecture (built from scratch):**
 
 ```
-Image → Augmentation → Rescaling (÷255)
-      → [Conv3×3 → BN → Conv3×3 → BN → MaxPool → Dropout(0.25)] × 4   (filters: 32, 64, 128, 256)
-      → GlobalAveragePooling → Dense(256, ReLU) → Dropout(0.5) → Dense(38, softmax)
+Input 128×128×3
+  → Data Augmentation (flip, rotation, zoom, contrast)
+  → Rescaling (1/255)
+  → 4 × [ Conv → BatchNorm → Conv → BatchNorm → MaxPool → Dropout(0.25) ]
+        (filters: 32 → 64 → 128 → 256)
+  → GlobalAveragePooling
+  → Dense(256) + Dropout(0.5)
+  → Dense(38, Softmax)
 ```
-
-- **Augmentation (training only):** random flip (horizontal + vertical), rotation (±15%), zoom (10%), contrast (10%).
-- **BatchNormalization** after each convolution for stable and faster training.
-- **Dropout** and **GlobalAveragePooling** to reduce overfitting.
 
 **Training setup:**
+- Adam optimizer with a learning rate of 0.001, and `sparse_categorical_crossentropy` loss.
+- **Class imbalance:** `class_weight` computed from the training set only.
+- Callbacks: `ModelCheckpoint` (save the best model), `EarlyStopping`, and `ReduceLROnPlateau`.
+- Up to 30 epochs, with GPU enabled.
 
-| Setting | Value |
-|---|---|
-| Optimizer | Adam, learning rate 1e-3 |
-| Loss | Sparse categorical cross-entropy |
-| Max epochs | 30 |
-| Batch size | 64 |
-| `ModelCheckpoint` | Saves the best model by `val_accuracy` to Drive (`cnn_best.keras`) |
-| `EarlyStopping` | Patience 5, restores the best weights |
-| `ReduceLROnPlateau` | Halves the learning rate after 2 epochs without improvement |
+#### Handling class imbalance (Class Weights)
 
-**Training results (validation set):**
+**Problem:** the number of images varies a lot between classes (from 152 to 5,507, about 36×), so the model sees large classes thousands of times and small classes only a few times, and learns the large ones better. Overall accuracy alone is misleading here: a class such as `Potato___healthy` is under 0.3% of the data, so even if the model got every one of its images wrong, overall accuracy would drop by only that much.
 
-Training stopped automatically at epoch 16 (early stopping). The best epoch was **epoch 11**, and its weights were restored.
+**Solution:** multiply each image's loss by a weight based on its class, so a mistake on a rare-class image costs more than a mistake on a common-class image:
 
-| | Epoch 11 (best) | Epoch 16 (last) |
-|---|---|---|
-| Train accuracy | 97.6% | 98.7% |
-| Validation accuracy | **94.3%** | 93.7% |
-| Validation loss | 0.183 | 0.213 |
+```
+weight = number of training images / (number of classes × images in the class)
+```
 
-Validation accuracy fluctuated noticeably between epochs (from about 56% up to 94%) while training accuracy rose steadily. This is common for a from-scratch CNN with BatchNormalization at a relatively high learning rate. The gap between training and validation accuracy at the end indicates mild overfitting.
+Rough example: the smallest class (~107 training images) gets a weight near 9, and the largest (~3,850 images) a weight near 0.26, so each class contributes roughly equally to training.
 
-### Stage 5: Evaluation on the test set
+```python
+w = compute_class_weight("balanced", classes=np.arange(NUM_CLASSES), y=train_df["y"].values)
+class_weight = dict(enumerate(w))
+cnn.fit(train_ds, validation_data=val_ds, class_weight=class_weight, ...)
+```
 
-The test set was evaluated once, with the best checkpoint (`cnn_best.keras`).
+- Weights are computed from the **training set only**.
+- They work together with the data augmentation layers inside the model, which add variety to small-class images.
+- **Measuring success:** not overall accuracy alone, but **macro F1** and **per-class recall** on the validation set.
+- **Fallback:** if some small classes stay weak, try oversampling (repeating small-class images with augmentation) **instead of** class_weight, not together with it, and compare by macro F1 on validation.
+- SMOTE was not used because it is designed for tabular data, and interpolating pixels between two images produces an unrealistic image.
 
-| Metric | Value |
-|---|---|
-| **Test accuracy** | **94.6%** |
-| Macro F1 | 0.935 |
-| Weighted F1 | 0.946 |
+### Stage 5: Evaluation
 
-Test accuracy (94.6%) is consistent with validation accuracy (94.3%), so the validation set was not overfitted.
-
-**Strongest classes (F1 ≥ 0.99):** `Corn_(maize)___healthy` (1.000), `Corn_(maize)___Common_rust_` (0.997), `Strawberry___Leaf_scorch` (0.991), `Tomato___Tomato_mosaic_virus` (0.991), `Orange___Haunglongbing_(Citrus_greening)` (0.990).
-
-**Weakest classes (lowest F1):**
-
-| Class | Precision | Recall | F1 | Test images |
-|---|---|---|---|---|
-| `Potato___healthy` | 0.895 | 0.773 | 0.829 | 22 |
-| `Raspberry___healthy` | 0.875 | 0.808 | 0.840 | 52 |
-| `Tomato___Spider_mites Two-spotted_spider_mite` | 0.957 | 0.748 | 0.840 | 238 |
-| `Pepper,_bell___healthy` | 1.000 | 0.776 | 0.874 | 210 |
-| `Strawberry___healthy` | 0.947 | 0.831 | 0.885 | 65 |
-| `Apple___healthy` | 0.801 | 0.987 | 0.885 | 233 |
-
-**Observations:**
-- Several "healthy" classes and a few small classes are the weakest. Some classes (`Apple___healthy`, `Tomato___healthy`) have high recall but lower precision, meaning other images are being assigned to them. Others (`Pepper,_bell___healthy`, `Tomato___Spider_mites`) have high precision but lower recall, meaning their images are being assigned elsewhere.
-- Very small classes such as `Potato___healthy` (22 test images) are sensitive to a single error.
-
-**Planned:** a confusion-matrix analysis of the most frequent mistakes, and testing on images from outside the dataset to measure real-world performance (PlantVillage images are lab-style photos with plain backgrounds, so accuracy on field photos is expected to be lower).
+- Decisions and comparisons are made on the **validation** set (accuracy, macro F1, and a per-class report).
+- The **test** set is used **once**, at the end: accuracy, plus precision, recall, and F1 per class.
+- Try the model on images from outside the dataset to measure real-world performance.
 
 ## 6. Roadmap
 
 - [x] Download the dataset and inspect its structure and class distribution
 - [x] Build the image table and check for corrupted files
 - [x] Detect and remove duplicate images (21 images)
-- [x] Handle data leakage with perceptual hashing (pHash, 8 orientations)
-- [x] Split the dataset (train / val / test) with `StratifiedGroupKFold`
-- [x] Build the image loading pipeline (`tf.data`)
-- [x] Train the CNN (best validation accuracy 94.3%)
-- [x] Final evaluation on the test set (accuracy 94.6%)
-- [x] Build a FastAPI service and web interface for the model
-- [ ] Deploy the service (Render)
-- [ ] Confusion-matrix error analysis
-- [ ] Test on real-world photos from outside the dataset
+- [x] Split the dataset (train / val / test)
+- [x] Build the image loading pipeline
+- [x] Define the CNN architecture
+- [ ] Train the model with `class_weight`
+- [ ] Evaluate on validation, then on test
+- [ ] Error analysis and testing on images from outside the dataset
 
 ## 7. Getting Started
 
-The project is written for **Google Colab** (use a **T4 GPU** runtime):
+The project is written for **Google Colab**:
 
-1. Open the notebook in Colab and set Runtime → Change runtime type → T4 GPU.
-2. Mount Google Drive.
-3. Download the dataset from Kaggle (API token required) and unzip only the `color` folder to `/content`.
-4. Load `train.csv`, `val.csv`, and `test.csv` from Drive.
-5. Run the cells in order (do not use Run all).
+1. Open the notebook in Colab and enable a GPU (Runtime → Change runtime type).
+2. Create a Kaggle API token and store it in **Colab Secrets** as `KAGGLE_API_TOKEN` (never hardcode it in the notebook or push it to GitHub).
+3. Run the cells in order (do not use Run all): download and load, then build the table, clean, and split (once only), then model and training.
+4. In any later session, read `train.csv`, `val.csv`, and `test.csv` from Drive instead of splitting again.
 
 ```bash
-pip install "kaggle>=1.8.0" imagehash pillow pandas scikit-learn scipy matplotlib tensorflow
+pip install kaggle pillow pandas scikit-learn matplotlib tqdm tensorflow
 ```
-
-> The `/content` folder is deleted when the Colab session ends, so the dataset must be downloaded again in each new session. The tables and the best model checkpoint (`cnn_best.keras`) are kept in Google Drive.
