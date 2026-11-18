@@ -105,6 +105,15 @@
   .result.has .empty { display: none; }
   .result.has .full { display: block; }
 
+  /* rejected image (outside the model's known plants) */
+  .result .rej { display: none; padding: 24px 12px; text-align: center; }
+  .result.unk .empty, .result.unk .full { display: none; }
+  .result.unk .rej { display: block; }
+  .rej .ico { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; background: #fdecea; color: var(--danger); display: grid; place-items: center; font-size: 28px; font-weight: 700; }
+  .rej h3 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 600; line-height: 1.4; }
+  .rej p { margin: 0 auto 8px; max-width: 28em; color: var(--muted); }
+  .rej ul { text-align: start; display: inline-block; margin: 8px 0 0; padding-inline-start: 20px; color: var(--muted); font-size: 14.5px; }
+
   .verdict { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 18px; align-items: center; }
   .gauge { position: relative; width: 124px; height: 124px; }
   .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
@@ -239,7 +248,7 @@
         <a class="btn btn-primary" href="#diagnose">شخّص ورقة</a>
         <a class="btn btn-link" href="#numbers">ماذا تعني النسب؟</a>
       </div>
-      <p class="scope">يعرف 38 حالة لـ 14 نباتاً، من التفاح والطماطم إلى العنب والذرة.</p>
+      <p class="scope">يعرف 38 حالة لـ 14 نباتاً، من التفاح والطماطم إلى العنب والذرة. ويرفض الصور التي لا تشبه ما تدرّب عليه.</p>
     </div>
 
     <div class="stage" id="stage" data-state="idle">
@@ -278,6 +287,18 @@
 
       <div class="result" id="result" aria-live="polite">
         <div class="empty"><p>ستظهر هنا نتيجة التشخيص: اسم النبات والحالة، ونسبة ثقة المودل، وأقرب ثلاثة احتمالات.</p></div>
+
+        <div class="rej" id="rej">
+          <div class="ico" aria-hidden="true">!</div>
+          <h3>الصورة غير موجودة ضمن النباتات التي يعرفها المودل</h3>
+          <p>لا تبدو هذه الصورة ورقة من النباتات الـ 14 المدعومة، ولذلك رفضها المودل بدلاً من تخمين تشخيص خاطئ.</p>
+          <ul>
+            <li>صوّر ورقة واحدة قريبة وواضحة</li>
+            <li>استخدم خلفية بسيطة وإضاءة جيدة</li>
+            <li>تأكد أن النبات من القائمة المدعومة</li>
+          </ul>
+        </div>
+
         <div class="full">
           <div class="verdict">
             <div class="gauge" id="gauge" data-level="high">
@@ -316,6 +337,7 @@
 
     <div class="tabs" role="tablist" aria-label="شرح النسب">
       <button role="tab" id="tab1" aria-controls="pane1" aria-selected="true">نسبة الثقة</button>
+      <!-- حدّث الرقم 94.6% من نتيجة test الجديدة -->
       <button role="tab" id="tab2" aria-controls="pane2" aria-selected="false" tabindex="-1">دقة المودل 94.6%</button>
       <button role="tab" id="tab3" aria-controls="pane3" aria-selected="false" tabindex="-1">ما لا تعنيه</button>
     </div>
@@ -339,6 +361,7 @@
 
     <div class="tabpanel" id="pane2" role="tabpanel" aria-labelledby="tab2" hidden>
       <div>
+        <!-- حدّث الأرقام التالية من نتيجة test الجديدة (حجمها نحو 8143 صورة) -->
         <h3>94.6% هي دقة المودل على صور اختبار لم يرها</h3>
         <p>بعد التدريب، اختبرنا المودل على <strong>7,738 صورة</strong> لم يتدرب عليها. صنّف منها نحو <strong>7,321 صورة</strong> تصنيفاً صحيحاً، أي <strong>94.6%</strong>.</p>
         <p>هذا الرقم يصف المودل كله، وليس صورتك. ولا يعني أن كل تشخيص تحصل عليه صحيح بهذه النسبة، خصوصاً مع صور تختلف عن صور التدريب.</p>
@@ -356,7 +379,7 @@
         <ul>
           <li><strong>ليست نسبة إصابة الورقة.</strong> 98% لا تعني أن 98% من الورقة مصابة، ولا أن المرض شديد.</li>
           <li><strong>ليست ضمان صحة.</strong> قد يكون المودل واثقاً ومخطئاً، خصوصاً مع صور حقول حقيقية، فالتدريب كان على صور بخلفية بسيطة.</li>
-          <li><strong>لا يقول "لا أعرف".</strong> يوزع الـ 100% دائماً على الحالات الـ 38 المعروفة له، حتى لو كانت الصورة لشيء آخر.</li>
+          <li><strong>رفضه للصور الغريبة ليس مضموناً بالكامل.</strong> يقارن المودل الصورة بصور التدريب فيرفض ما يبتعد عنها، لكن بعض الصور الغريبة قد تمر، وبعض أوراق النباتات السليمة قد تُرفض إذا كانت الإضاءة أو الخلفية مختلفة.</li>
         </ul>
       </div>
       <div>
@@ -378,7 +401,7 @@
 <footer>
   <div class="wrap">
     <p>النتيجة استرشادية وليست بديلاً عن رأي مهندس زراعي.</p>
-    <p>المودل شبكة عصبية التفافية (CNN) مدرَّبة على صور PlantVillage، وتعمل عبر FastAPI. دقته على صور الحقول الحقيقية أقل من دقته على صور الاختبار.</p>
+    <p>المودل شبكة عصبية التفافية (CNN) مدرَّبة على صور PlantVillage، وتعمل عبر FastAPI. يرفض الصور البعيدة عن بيانات التدريب، ودقته على صور الحقول الحقيقية أقل من دقته على صور الاختبار.</p>
   </div>
 </footer>
 
@@ -596,7 +619,7 @@ go.addEventListener("click", async () => {
     const [r] = await Promise.all([fetch("/predict", { method: "POST", body: fd }), new Promise(res => setTimeout(res, 1100))]);
     let data = {}; try { data = await r.json(); } catch (e) {}
     if (!r.ok) throw new Error(data.detail || "تعذّر التحليل. حاول مرة أخرى.");
-    show(data);
+    if (data.unknown) showUnknown(data); else show(data);
   } catch (e) {
     showErr(e.message === "Failed to fetch" ? "تعذّر الاتصال بالخادم. إذا كانت الخدمة مجانية على Render فقد تحتاج دقيقة لتستيقظ، حاول بعد قليل." : e.message);
   } finally {
@@ -611,7 +634,18 @@ const LEVEL_TEXT = {
   low: "ثقة منخفضة: لا تعتمد على هذا التشخيص. صوّر ورقة واحدة على خلفية بسيطة وبإضاءة جيدة."
 };
 
+function showUnknown() {
+  last = null;
+  const res = $("result");
+  res.classList.remove("has");
+  res.classList.add("unk");
+  LeafScene.setState("idle");
+  updateLive();
+  if (matchMedia("(max-width: 960px)").matches) res.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function show(d) {
+  $("result").classList.remove("unk");
   last = d;
   const p = d.prediction, conf = p.confidence, lv = level(conf);
   const [condAr, kind] = condInfo(p.condition);
