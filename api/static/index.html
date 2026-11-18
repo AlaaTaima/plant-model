@@ -419,7 +419,8 @@ const LeafScene = (function () {
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); }
   catch (e) { stage.classList.add("nogl"); return noop; }
 
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Windows "show animations = off" sets reduced-motion and freezes the leaf; add ?motion=1 to the URL to force it
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches && !/[?&]motion=1/.test(location.search);
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -502,8 +503,12 @@ const LeafScene = (function () {
   const scan = new THREE.Mesh(new THREE.PlaneGeometry(W * 2.4, 0.07), new THREE.MeshBasicMaterial({ color: 0x8dffb0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   scan.position.z = 0.5; group.add(scan);
 
-  group.rotation.set(-0.12, 0, 0.18);
-  scene.add(group);
+  /* the leaf hangs from its stem: the pivot sits at the stem tip, so it sways like a real leaf */
+  const STEM_Y = L / 2 + 0.72;
+  group.position.y = STEM_Y;
+  const pivot = new THREE.Group(); pivot.add(group);
+  pivot.position.y = -STEM_Y; pivot.rotation.set(-0.12, 0, 0.06);
+  scene.add(pivot);
 
   /* interaction: drag to rotate, eases back to its slow sway */
   let dragging = false, lastX = 0, lastY = 0, userY = 0, userX = 0, scanning = false, visible = true, t0 = performance.now();
@@ -529,10 +534,12 @@ const LeafScene = (function () {
   function draw(now) {
     const t = (now - t0) / 1000;
     if (!dragging) { userY *= 0.965; userX *= 0.965; }
-    const sway = reduce ? 0 : Math.sin(t * 0.45) * 0.45;
-    group.rotation.y = sway + userY + (scanning ? Math.sin(t * 1.2) * 0.1 : 0);
-    group.rotation.x = -0.12 + userX;
-    group.position.y = reduce ? 0 : Math.sin(t * 0.9) * 0.1;
+    const k = reduce ? 0 : 1;
+    // slow side-to-side swing + a faster small flutter, like wind
+    pivot.rotation.z = 0.06 + k * (Math.sin(t * 0.95) * 0.16 + Math.sin(t * 2.4) * 0.035);
+    pivot.rotation.y = k * Math.sin(t * 0.6) * 0.38 + userY + (scanning ? Math.sin(t * 1.2) * 0.1 : 0);
+    pivot.rotation.x = -0.12 + userX + k * Math.sin(t * 0.75 + 1) * 0.05;
+    pivot.position.y = -STEM_Y + k * Math.sin(t * 1.1) * 0.04;
     if (scanning) {
       const p = (t * 0.9) % 1;
       scan.position.y = (p - 0.5) * L; scan.material.opacity = 0.85 * Math.sin(Math.PI * p);
